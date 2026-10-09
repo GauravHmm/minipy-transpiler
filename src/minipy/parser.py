@@ -1,3 +1,4 @@
+
 from minipy.lexer import TokenType
 from minipy.ast import (
     NumberNode,
@@ -30,7 +31,8 @@ class Parser:
 
         if token.type != token_type:
             raise SyntaxError(
-                f"Expected {token_type}, got {token.type}"
+                f"Expected {token_type.name}, "
+                f"got {token.type.name} ('{token.value}')"
             )
 
         self.position += 1
@@ -41,12 +43,16 @@ class Parser:
 
         while self.current_token().type != TokenType.EOF:
             if self.current_token().type == TokenType.NEWLINE:
-                self.position += 1
+                self.eat(TokenType.NEWLINE)
                 continue
 
             statements.append(self.statement())
 
         return statements
+
+    # -------------------------
+    # Statements
+    # -------------------------
 
     def statement(self):
         token_type = self.current_token().type
@@ -72,8 +78,9 @@ class Parser:
         if token_type == TokenType.RETURN:
             return self.return_statement()
 
+        token = self.current_token()
         raise SyntaxError(
-            f"Unexpected token: {self.current_token().type}"
+            f"Unexpected token: {token.type.name} ('{token.value}')"
         )
 
     def assignment(self):
@@ -106,7 +113,6 @@ class Parser:
         self.eat(TokenType.INDENT)
 
         body = self.block()
-
         self.eat(TokenType.DEDENT)
 
         else_body = None
@@ -118,7 +124,6 @@ class Parser:
             self.eat(TokenType.INDENT)
 
             else_body = self.block()
-
             self.eat(TokenType.DEDENT)
 
         return IfNode(condition, body, else_body)
@@ -133,7 +138,6 @@ class Parser:
         self.eat(TokenType.INDENT)
 
         body = self.block()
-
         self.eat(TokenType.DEDENT)
 
         return WhileNode(condition, body)
@@ -142,7 +146,6 @@ class Parser:
         self.eat(TokenType.FOR)
 
         variable = self.eat(TokenType.IDENTIFIER).value
-
         self.eat(TokenType.IN)
 
         iterable = self.expression()
@@ -152,7 +155,6 @@ class Parser:
         self.eat(TokenType.INDENT)
 
         body = self.block()
-
         self.eat(TokenType.DEDENT)
 
         return ForNode(variable, iterable, body)
@@ -161,7 +163,6 @@ class Parser:
         self.eat(TokenType.DEF)
 
         name = self.eat(TokenType.IDENTIFIER).value
-
         self.eat(TokenType.LPAREN)
 
         parameters = []
@@ -173,7 +174,6 @@ class Parser:
 
             while self.current_token().type == TokenType.COMMA:
                 self.eat(TokenType.COMMA)
-
                 parameters.append(
                     self.eat(TokenType.IDENTIFIER).value
                 )
@@ -184,7 +184,6 @@ class Parser:
         self.eat(TokenType.INDENT)
 
         body = self.block()
-
         self.eat(TokenType.DEDENT)
 
         return FunctionNode(name, parameters, body)
@@ -209,12 +208,15 @@ class Parser:
             TokenType.EOF,
         ):
             if self.current_token().type == TokenType.NEWLINE:
-                self.position += 1
-                continue
-
-            statements.append(self.statement())
+                self.eat(TokenType.NEWLINE)
+            else:
+                statements.append(self.statement())
 
         return statements
+
+    # -------------------------
+    # Expressions
+    # -------------------------
 
     def expression(self):
         return self.logical_or()
@@ -223,10 +225,9 @@ class Parser:
         node = self.logical_and()
 
         while self.current_token().type == TokenType.OR:
-            operator = self.current_token().value
-            self.position += 1
-
+            operator = self.eat(TokenType.OR).value
             right = self.logical_and()
+
             node = BinaryOpNode(node, operator, right)
 
         return node
@@ -235,16 +236,15 @@ class Parser:
         node = self.comparison()
 
         while self.current_token().type == TokenType.AND:
-            operator = self.current_token().value
-            self.position += 1
-
+            operator = self.eat(TokenType.AND).value
             right = self.comparison()
+
             node = BinaryOpNode(node, operator, right)
 
         return node
 
     def comparison(self):
-        node = self.term()
+        node = self.arithmetic_expression()
 
         comparison_tokens = (
             TokenType.LESS,
@@ -259,6 +259,21 @@ class Parser:
             operator = self.current_token().value
             self.position += 1
 
+            right = self.arithmetic_expression()
+            node = BinaryOpNode(node, operator, right)
+
+        return node
+
+    def arithmetic_expression(self):
+        node = self.term()
+
+        while self.current_token().type in (
+            TokenType.PLUS,
+            TokenType.MINUS,
+        ):
+            operator = self.current_token().value
+            self.position += 1
+
             right = self.term()
             node = BinaryOpNode(node, operator, right)
 
@@ -268,8 +283,9 @@ class Parser:
         node = self.factor()
 
         while self.current_token().type in (
-            TokenType.PLUS,
-            TokenType.MINUS,
+            TokenType.MULTIPLY,
+            TokenType.DIVIDE,
+            TokenType.MODULO,
         ):
             operator = self.current_token().value
             self.position += 1
@@ -280,20 +296,7 @@ class Parser:
         return node
 
     def factor(self):
-        node = self.unary()
-
-        while self.current_token().type in (
-            TokenType.MULTIPLY,
-            TokenType.DIVIDE,
-            TokenType.MODULO,
-        ):
-            operator = self.current_token().value
-            self.position += 1
-
-            right = self.unary()
-            node = BinaryOpNode(node, operator, right)
-
-        return node
+        return self.unary()
 
     def unary(self):
         if self.current_token().type in (
@@ -304,7 +307,6 @@ class Parser:
             self.position += 1
 
             operand = self.unary()
-
             return UnaryOpNode(operator, operand)
 
         return self.primary()
@@ -313,24 +315,23 @@ class Parser:
         token = self.current_token()
 
         if token.type == TokenType.NUMBER:
-            self.position += 1
+            self.eat(TokenType.NUMBER)
             return NumberNode(token.value)
 
         if token.type == TokenType.STRING:
-            self.position += 1
+            self.eat(TokenType.STRING)
             return StringNode(token.value)
 
         if token.type == TokenType.TRUE:
-            self.position += 1
+            self.eat(TokenType.TRUE)
             return BooleanNode(True)
 
         if token.type == TokenType.FALSE:
-            self.position += 1
+            self.eat(TokenType.FALSE)
             return BooleanNode(False)
 
         if token.type == TokenType.IDENTIFIER:
-            name = token.value
-            self.position += 1
+            name = self.eat(TokenType.IDENTIFIER).value
 
             if self.current_token().type == TokenType.LPAREN:
                 return self.call(name)
@@ -338,20 +339,20 @@ class Parser:
             return IdentifierNode(name)
 
         if token.type == TokenType.RANGE:
-            self.position += 1
+            self.eat(TokenType.RANGE)
             return self.call("range")
 
         if token.type == TokenType.LPAREN:
-            self.position += 1
+            self.eat(TokenType.LPAREN)
 
             node = self.expression()
 
             self.eat(TokenType.RPAREN)
-
             return node
 
         raise SyntaxError(
-            f"Unexpected token: {token.type}"
+            f"Unexpected token in expression: "
+            f"{token.type.name} ('{token.value}')"
         )
 
     def call(self, name):
