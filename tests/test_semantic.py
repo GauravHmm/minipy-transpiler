@@ -93,3 +93,41 @@ def test_return_outside_function():
 
     with pytest.raises(SemanticError, match="inside a function"):
         analyze_source(source)
+
+
+def test_block_local_variable_cannot_be_used_after_if():
+    source = """
+if True:
+    inside = 1
+print(inside)
+"""
+
+    with pytest.raises(SemanticError, match="not defined"):
+        analyze_source(source)
+
+
+def test_functions_require_integer_arguments_and_returns():
+    with pytest.raises(SemanticError, match="integer"):
+        analyze_source("""
+def identity(value):
+    return value
+
+result = identity("text")
+""")
+
+    with pytest.raises(SemanticError, match="return an integer"):
+        analyze_source("""
+def greeting():
+    return "hello"
+""")
+
+
+def test_range_step_and_modulo_require_integers():
+    with pytest.raises(SemanticError, match="positive integer"):
+        analyze_source("""
+for number in range(0, 5, -1):
+    print(number)
+""")
+
+    with pytest.raises(SemanticError, match="integer operands"):
+        analyze_source("result = 5.0 % 2")

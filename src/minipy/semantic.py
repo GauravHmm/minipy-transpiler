@@ -77,19 +77,16 @@ class SemanticAnalyzer:
             condition_type = self.check_expression(node.condition)
             self.require_boolean(condition_type, "if condition")
 
-            for statement in node.body:
-                self.check_statement(statement)
+            self.check_scoped_block(node.body)
 
             if node.else_body is not None:
-                for statement in node.else_body:
-                    self.check_statement(statement)
+                self.check_scoped_block(node.else_body)
 
         elif isinstance(node, WhileNode):
             condition_type = self.check_expression(node.condition)
             self.require_boolean(condition_type, "while condition")
 
-            for statement in node.body:
-                self.check_statement(statement)
+            self.check_scoped_block(node.body)
 
         elif isinstance(node, ForNode):
             if not (
@@ -102,13 +99,9 @@ class SemanticAnalyzer:
 
             self.check_expression(node.iterable)
 
-            if self.local_variables is not None:
-                self.local_variables[node.variable] = "int"
-            else:
-                self.variables[node.variable] = "int"
-
-            for statement in node.body:
-                self.check_statement(statement)
+            self.check_scoped_block(
+                node.body, extra_variables={node.variable: "int"}
+            )
 
         elif isinstance(node, FunctionNode):
             self.check_function(node)
@@ -120,12 +113,34 @@ class SemanticAnalyzer:
                 )
 
             if node.expression is not None:
-                self.check_expression(node.expression)
+                return_type = self.check_expression(node.expression)
+                if return_type not in ("int", "unknown"):
+                    raise SemanticError(
+                        "Functions must return an integer value"
+                    )
 
         else:
             raise SemanticError(
                 f"Unsupported statement: {type(node).__name__}"
             )
+
+    def check_scoped_block(self, statements, extra_variables=None):
+        """Check a C++ block without leaking newly declared names outside it."""
+        scope = (
+            self.local_variables
+            if self.local_variables is not None
+            else self.variables
+        )
+        original_scope = scope.copy()
+        if extra_variables:
+            scope.update(extra_variables)
+
+        for statement in statements:
+            self.check_statement(statement)
+
+        for name in list(scope):
+            if name not in original_scope:
+                del scope[name]
 
     def check_function(self, function):
         # A function gets its own local variable dictionary.
@@ -172,14 +187,6 @@ class SemanticAnalyzer:
             return
 
         if value_type == "unknown":
-            return
-
-        # Allow integers to be promoted to floats.
-        if previous_type == "float" and value_type == "int":
-            return
-
-        if previous_type == "int" and value_type == "float":
-            scope[name] = "float"
             return
 
         if previous_type != value_type:
@@ -295,6 +302,13 @@ class SemanticAnalyzer:
         if operator == "/":
             return "float"
 
+        if operator == "%" and (
+            left_type != "int" or right_type != "int"
+        ):
+            raise SemanticError(
+                "Operator '%' requires integer operands"
+            )
+
         if "float" in (left_type, right_type):
             return "float"
 
@@ -350,6 +364,17 @@ class SemanticAnalyzer:
                         "range() arguments must be integers"
                     )
 
+            if len(node.arguments) == 3:
+                step = node.arguments[2]
+                if (
+                    not isinstance(step, NumberNode)
+                    or "." in step.value
+                    or int(step.value) <= 0
+                ):
+                    raise SemanticError(
+                        "range() step must be a positive integer literal"
+                    )
+
             return "range"
 
         if node.name not in self.functions:
@@ -367,7 +392,10 @@ class SemanticAnalyzer:
             )
 
         for argument in node.arguments:
-            self.check_expression(argument)
+            argument_type = self.check_expression(argument)
+            if argument_type not in ("int", "unknown"):
+                raise SemanticError(
+                    f"Function '{node.name}' only accepts integer arguments"
+                )
 
-        # Return-type inference will be added in a later version.
-        return "unknown"
+        return "int"

@@ -255,22 +255,30 @@ class Lexer:
     def _read_string(self) -> Token:
         quote = self.source[self.position]
         self.position += 1
+        characters = []
 
-        start = self.position
-
-        while (
-            self.position < len(self.source)
-            and self.source[self.position] != quote
-        ):
+        while self.position < len(self.source):
+            char = self.source[self.position]
+            if char == quote:
+                self.position += 1
+                return Token(TokenType.STRING, "".join(characters))
+            if char == "\\":
+                self.position += 1
+                if self.position >= len(self.source):
+                    raise SyntaxError("Unterminated string")
+                escaped = self.source[self.position]
+                characters.append({
+                    "n": "\n", "t": "\t", "\\": "\\",
+                    "\"": "\"", "'": "'",
+                }.get(escaped, escaped))
+                self.position += 1
+                continue
+            if char == "\n":
+                raise SyntaxError("Unterminated string")
+            characters.append(char)
             self.position += 1
 
-        if self.position >= len(self.source):
-            raise SyntaxError("Unterminated string")
-
-        value = self.source[start:self.position]
-        self.position += 1
-
-        return Token(TokenType.STRING, value)
+        raise SyntaxError("Unterminated string")
 
     def _skip_comment(self):
         while (

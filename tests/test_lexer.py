@@ -48,3 +48,10 @@ def test_indentation():
 
     assert TokenType.INDENT in token_types
     assert TokenType.DEDENT in token_types
+
+
+def test_string_escapes_are_read_as_one_string():
+    tokens = Lexer('message = "say \\"hello\\"\\n"').tokenize()
+
+    assert tokens[2].type == TokenType.STRING
+    assert tokens[2].value == 'say "hello"\n'

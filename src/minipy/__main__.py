@@ -4,7 +4,7 @@ from pathlib import Path
 
 from minipy.lexer import Lexer
 from minipy.parser import Parser
-from minipy.semantic import SemanticAnalyzer
+from minipy.semantic import SemanticAnalyzer, SemanticError
 from minipy.codegen import CodeGenerator
 
 
@@ -43,7 +43,7 @@ def main():
 
         print(f"C++ code generated successfully: {output_file}")
 
-    except (SyntaxError, ValueError) as error:
+    except (SyntaxError, ValueError, SemanticError) as error:
         print(f"Error: {error}")
         sys.exit(1)
 

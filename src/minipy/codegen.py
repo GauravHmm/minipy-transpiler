@@ -21,6 +21,7 @@ class CodeGenerator:
     def __init__(self):
         self.indent_level = 0
         self.declared_variables = set()
+        self.variable_types = {}
         self.function_names = set()
 
     def indent(self):
@@ -49,6 +50,7 @@ class CodeGenerator:
         lines.append("int main() {")
         self.indent_level = 1
         self.declared_variables = set()
+        self.variable_types = {}
 
         for statement in statements:
             if not isinstance(statement, FunctionNode):
@@ -62,6 +64,7 @@ class CodeGenerator:
     def generate_function(self, node):
         previous_indent = self.indent_level
         previous_variables = self.declared_variables
+        previous_types = self.variable_types
 
         # Initially use int as the return type.
         parameters = ", ".join(
@@ -74,6 +77,7 @@ class CodeGenerator:
 
         self.indent_level = 1
         self.declared_variables = set(node.parameters)
+        self.variable_types = {parameter: "int" for parameter in node.parameters}
 
         for statement in node.body:
             lines.extend(self.generate_statement(statement))
@@ -83,6 +87,7 @@ class CodeGenerator:
 
         self.indent_level = previous_indent
         self.declared_variables = previous_variables
+        self.variable_types = previous_types
 
         return lines
 
@@ -95,6 +100,7 @@ class CodeGenerator:
             if node.name not in self.declared_variables:
                 variable_type = self.infer_type(node.expression)
                 self.declared_variables.add(node.name)
+                self.variable_types[node.name] = variable_type
 
                 return [
                     f"{prefix}{variable_type} {node.name} = "
@@ -115,22 +121,12 @@ class CodeGenerator:
             condition = self.generate_expression(node.condition)
             lines = [f"{prefix}if ({condition}) {{"]
 
-            self.indent_level += 1
-
-            for statement in node.body:
-                lines.extend(self.generate_statement(statement))
-
-            self.indent_level -= 1
+            lines.extend(self.generate_block(node.body))
             lines.append(prefix + "}")
 
             if node.else_body is not None:
                 lines[-1] += " else {"
-                self.indent_level += 1
-
-                for statement in node.else_body:
-                    lines.extend(self.generate_statement(statement))
-
-                self.indent_level -= 1
+                lines.extend(self.generate_block(node.else_body))
                 lines.append(prefix + "}")
 
             return lines
@@ -139,12 +135,7 @@ class CodeGenerator:
             condition = self.generate_expression(node.condition)
             lines = [f"{prefix}while ({condition}) {{"]
 
-            self.indent_level += 1
-
-            for statement in node.body:
-                lines.extend(self.generate_statement(statement))
-
-            self.indent_level -= 1
+            lines.extend(self.generate_block(node.body))
             lines.append(prefix + "}")
 
             return lines
@@ -179,12 +170,9 @@ class CodeGenerator:
                 f"{node.variable} += {step}) {{"
             ]
 
-            self.indent_level += 1
-
-            for statement in node.body:
-                lines.extend(self.generate_statement(statement))
-
-            self.indent_level -= 1
+            lines.extend(
+                self.generate_block(node.body, {node.variable: "int"})
+            )
             lines.append(prefix + "}")
 
             return lines
@@ -200,6 +188,24 @@ class CodeGenerator:
             f"Unsupported statement: {type(node).__name__}"
         )
 
+    def generate_block(self, statements, extra_types=None):
+        """Generate a C++ block and keep block-local declarations local."""
+        previous_variables = self.declared_variables.copy()
+        previous_types = self.variable_types.copy()
+        if extra_types:
+            self.declared_variables.update(extra_types)
+            self.variable_types.update(extra_types)
+
+        self.indent_level += 1
+        lines = []
+        for statement in statements:
+            lines.extend(self.generate_statement(statement))
+        self.indent_level -= 1
+
+        self.declared_variables = previous_variables
+        self.variable_types = previous_types
+        return lines
+
     def generate_expression(self, node):
         if isinstance(node, NumberNode):
             return node.value
@@ -209,6 +215,8 @@ class CodeGenerator:
                 node.value
                 .replace("\\", "\\\\")
                 .replace('"', '\\"')
+                .replace("\n", "\\n")
+                .replace("\t", "\\t")
             )
             return f'"{escaped}"'
 
@@ -245,6 +253,9 @@ class CodeGenerator:
                     f"Unsupported operator: {node.operator}"
                 )
 
+            if node.operator == "/":
+                return f"(static_cast<double>({left}) / {right})"
+
             return f"({left} {operator} {right})"
 
         if isinstance(node, UnaryOpNode):
@@ -279,6 +290,9 @@ class CodeGenerator:
                 return "double"
             return "int"
 
+        if isinstance(node, IdentifierNode):
+            return self.variable_types.get(node.name, "int")
+
         if isinstance(node, BinaryOpNode):
             if node.operator in (
                 "<", ">", "<=", ">=", "==", "!=", "and", "or"
@@ -290,6 +304,9 @@ class CodeGenerator:
 
             if "std::string" in (left_type, right_type):
                 return "std::string"
+
+            if node.operator == "/":
+                return "double"
 
             if "double" in (left_type, right_type):
                 return "double"
