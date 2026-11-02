@@ -350,6 +350,14 @@ class SemanticAnalyzer:
     # -------------------------
 
     def check_call(self, node):
+        if node.name == "input":
+            if node.arguments:
+                raise SemanticError(
+                    "input() does not accept arguments"
+                )
+
+            return "string"
+
         if node.name == "range":
             if not 1 <= len(node.arguments) <= 3:
                 raise SemanticError(

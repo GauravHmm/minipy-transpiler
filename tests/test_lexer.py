@@ -55,3 +55,10 @@ def test_string_escapes_are_read_as_one_string():
 
     assert tokens[2].type == TokenType.STRING
     assert tokens[2].value == 'say "hello"\n'
+
+
+def test_input_is_recognized_as_a_callable_identifier():
+    tokens = Lexer("name = input()").tokenize()
+
+    assert tokens[2].type == TokenType.IDENTIFIER
+    assert tokens[2].value == "input"

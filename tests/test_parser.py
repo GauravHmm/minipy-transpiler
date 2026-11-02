@@ -60,3 +60,12 @@ def test_function_call():
     assert isinstance(expression, CallNode)
     assert expression.name == "range"
     assert len(expression.arguments) == 1
+
+
+def test_input_call_expression():
+    program = parse_source("name = input()")
+
+    expression = program[0].expression
+    assert isinstance(expression, CallNode)
+    assert expression.name == "input"
+    assert expression.arguments == []

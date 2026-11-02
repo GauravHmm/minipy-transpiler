@@ -34,12 +34,26 @@ class CodeGenerator:
             for statement in statements
             if isinstance(statement, FunctionNode)
         }
+        uses_input = any(
+            self.statement_uses_input(statement)
+            for statement in statements
+        )
 
         lines = [
             "#include <iostream>",
             "#include <string>",
             "",
         ]
+
+        if uses_input:
+            lines.extend([
+                "std::string minipy_input() {",
+                "    std::string value;",
+                "    std::getline(std::cin, value);",
+                "    return value;",
+                "}",
+                "",
+            ])
 
         # Generate functions before main().
         for statement in statements:
@@ -60,6 +74,64 @@ class CodeGenerator:
         lines.append("}")
 
         return "\n".join(lines) + "\n"
+
+    def statement_uses_input(self, node):
+        if isinstance(node, (AssignmentNode, PrintNode)):
+            return self.expression_uses_input(node.expression)
+
+        if isinstance(node, (IfNode, WhileNode)):
+            return (
+                self.expression_uses_input(node.condition)
+                or any(
+                    self.statement_uses_input(statement)
+                    for statement in node.body
+                )
+                or any(
+                    self.statement_uses_input(statement)
+                    for statement in (node.else_body or [])
+                )
+            )
+
+        if isinstance(node, ForNode):
+            return (
+                self.expression_uses_input(node.iterable)
+                or any(
+                    self.statement_uses_input(statement)
+                    for statement in node.body
+                )
+            )
+
+        if isinstance(node, FunctionNode):
+            return any(
+                self.statement_uses_input(statement)
+                for statement in node.body
+            )
+
+        if isinstance(node, ReturnNode) and node.expression is not None:
+            return self.expression_uses_input(node.expression)
+
+        return False
+
+    def expression_uses_input(self, node):
+        if isinstance(node, CallNode):
+            return (
+                node.name == "input"
+                or any(
+                    self.expression_uses_input(argument)
+                    for argument in node.arguments
+                )
+            )
+
+        if isinstance(node, BinaryOpNode):
+            return (
+                self.expression_uses_input(node.left)
+                or self.expression_uses_input(node.right)
+            )
+
+        if isinstance(node, UnaryOpNode):
+            return self.expression_uses_input(node.operand)
+
+        return False
 
     def generate_function(self, node):
         previous_indent = self.indent_level
@@ -267,6 +339,9 @@ class CodeGenerator:
             return f"({node.operator}{operand})"
 
         if isinstance(node, CallNode):
+            if node.name == "input":
+                return "minipy_input()"
+
             arguments = ", ".join(
                 self.generate_expression(arg)
                 for arg in node.arguments
@@ -319,6 +394,9 @@ class CodeGenerator:
             return self.infer_type(node.operand)
 
         if isinstance(node, CallNode):
+            if node.name == "input":
+                return "std::string"
+
             if node.name == "range":
                 return "int"
 

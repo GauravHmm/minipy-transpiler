@@ -131,3 +131,10 @@ for number in range(0, 5, -1):
 
     with pytest.raises(SemanticError, match="integer operands"):
         analyze_source("result = 5.0 % 2")
+
+
+def test_input_returns_a_string_and_rejects_arguments():
+    assert analyze_source("name = input()\nprint(name)") is True
+
+    with pytest.raises(SemanticError, match="does not accept arguments"):
+        analyze_source('name = input("Name: ")')

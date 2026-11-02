@@ -1,12 +1,9 @@
-
 import sys
 from pathlib import Path
-
 from minipy.lexer import Lexer
 from minipy.parser import Parser
 from minipy.semantic import SemanticAnalyzer, SemanticError
 from minipy.codegen import CodeGenerator
-
 
 def main():
     if len(sys.argv) != 2:

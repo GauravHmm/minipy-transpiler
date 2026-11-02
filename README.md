@@ -16,7 +16,7 @@ automatically compile or execute the generated program.
 - Integer and decimal number literals, strings, and `True` / `False`
 - Variables, reassignment with the same type, arithmetic, comparisons, and
   boolean `and`, `or`, and `not`
-- `print(expression)`
+- `print(expression)` and zero-argument `input()` line input
 - Indented `if` / `else`, `while`, and `for item in range(...)` blocks
 - Integer-only functions with integer parameters and integer return values
 - Comments beginning with `#` and escaped string characters such as `\"`,
@@ -96,4 +96,21 @@ python -m pytest -q
   used outside that block. This conservative rule keeps generated C++ scopes
   safe and easy to explain.
 - There are no lists, dictionaries, classes, input, `elif`, or standalone
-  function-call statements.
+  function-call statements. `input()` is the supported exception for input;
+  it returns a string and does not accept a prompt or numeric conversion.
+
+## Input example
+
+```python
+name = input()
+print(name)
+```
+
+MiniPy translates `input()` to a C++ helper using `std::getline`, so it reads
+an entire line, including spaces. Try the complete reviewed example with:
+
+```powershell
+python -m minipy examples\input_demo.mp
+g++ examples\input_demo.cpp -o examples\input_demo.exe
+.\examples\input_demo.exe
+```

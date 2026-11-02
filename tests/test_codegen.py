@@ -70,3 +70,19 @@ def test_integer_division_uses_a_double_expression():
 
     assert "double result" in output
     assert "static_cast<double>(5) / 2" in output
+
+
+def test_input_uses_a_getline_helper_for_assignment_and_print():
+    output = compile_minipy("name = input()\nprint(name)\nprint(input())")
+
+    assert "std::string minipy_input()" in output
+    assert "std::getline(std::cin, value);" in output
+    assert "std::string name = minipy_input();" in output
+    assert "std::cout << minipy_input() << std::endl;" in output
+
+
+def test_multiple_input_calls_use_one_helper():
+    output = compile_minipy("first = input()\nsecond = input()")
+
+    assert output.count("std::string minipy_input()") == 1
+    assert output.count("minipy_input()") == 3
